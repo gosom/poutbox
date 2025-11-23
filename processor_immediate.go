@@ -32,7 +32,7 @@ func (p *immediateJobProcessor) toHandlerJobs(jobs []postgres.PoutboxImmediate) 
 	for i, ij := range jobs {
 		handlerJobs[i] = HandlerJob{
 			ID:      ij.ID,
-			Payload: ij.Payload,
+			Payload: []byte(ij.Payload),
 		}
 	}
 	return handlerJobs
@@ -55,7 +55,7 @@ func (p *immediateJobProcessor) processResults(jobs []postgres.PoutboxImmediate,
 
 		for _, ij := range jobs {
 			if failedSet[ij.ID] {
-				failedBatch.add(ij.ID, ij.Payload, 1)
+				failedBatch.add(ij.ID, []byte(ij.Payload), 1)
 			}
 		}
 	} else {
@@ -97,7 +97,7 @@ func (p *immediateJobProcessor) commit(ctx context.Context, result *ProcessResul
 	if result.ToRetry != nil && len(result.ToRetry.jobs) > 0 {
 		err = p.c.queries.InsertFailedBatch(ctx, tx, postgres.InsertFailedBatchParams{
 			Ids:           result.ToRetry.ids(),
-			Payloads:      result.ToRetry.payloads(),
+			Payloads:      result.ToRetry.payloadsString(),
 			ErrorMessages: make([]string, len(result.ToRetry.jobs)),
 			RetryCounts:   result.ToRetry.retries(),
 		})

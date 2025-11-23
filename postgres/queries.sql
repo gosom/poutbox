@@ -8,12 +8,6 @@ INSERT INTO "poutbox".scheduled (payload, scheduled_at)
 VALUES ($1, $2)
 RETURNING id;
 
--- name: GetScheduleAtForIDs :many
-SELECT id, schedule_at FROM immediate WHERE id = ANY($1);
-
--- name: DeleteScheduledBatch :exec
-DELETE FROM scheduled WHERE id = ANY($1);
-
 -- name: InsertPartitionMeta :exec
 INSERT INTO "poutbox".partition_meta (partition_name, range_start, range_end)
 VALUES ($1, $2, $3)
@@ -56,11 +50,6 @@ WHERE id = 1;
 -- name: UpdateCursor :exec
 UPDATE "poutbox".cursor
 SET last_processed_id = @last_processed_id::bigint, last_processed_at = @last_processed_at::timestamptz, last_processed_transaction_id = @last_processed_transaction_id::bigint, updated_at = NOW() AT TIME ZONE 'UTC'
-WHERE id = 1;
-
--- name: UpdateScheduledCursor :exec
-UPDATE "poutbox".cursor
-SET last_processed_transaction_id = @last_processed_transaction_id::xid8, last_processed_scheduled_id = @last_processed_scheduled_id::bigint, last_processed_scheduled_at = @last_processed_scheduled_at::timestamptz, updated_at = NOW() AT TIME ZONE 'UTC'
 WHERE id = 1;
 
 -- name: DeleteFailed :exec

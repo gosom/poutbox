@@ -58,10 +58,10 @@ func (c *Client) Enqueue(ctx context.Context, job any, options ...EnqueueOption)
 	queries := postgres.New()
 
 	if opts.scheduleAt.IsZero() {
-		return queries.EnqueueImmediate(ctx, executor, payload)
+		return queries.EnqueueImmediate(ctx, executor, string(payload))
 	} else {
 		return queries.EnqueueScheduled(ctx, executor, postgres.EnqueueScheduledParams{
-			Payload:     payload,
+			Payload:     string(payload),
 			ScheduledAt: opts.scheduleAt,
 		})
 	}

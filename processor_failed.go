@@ -22,7 +22,7 @@ func (p *failedJobProcessor) toHandlerJobs(jobs []postgres.PoutboxFailed) []Hand
 	for i, fj := range jobs {
 		handlerJobs[i] = HandlerJob{
 			ID:      fj.ID,
-			Payload: fj.Payload,
+			Payload: []byte(fj.Payload),
 		}
 	}
 	return handlerJobs
@@ -39,10 +39,10 @@ func (p *failedJobProcessor) processResults(jobs []postgres.PoutboxFailed, faile
 		if failedSet[fj.ID] {
 			nextRetry := fj.RetryCount + 1
 			if nextRetry >= p.c.config.MaxRetries {
-				deadLetter.add(fj.ID, fj.Payload, nextRetry)
+				deadLetter.add(fj.ID, []byte(fj.Payload), nextRetry)
 				toDelete = append(toDelete, fj.ID)
 			} else {
-				toRetry.add(fj.ID, fj.Payload, nextRetry)
+				toRetry.add(fj.ID, []byte(fj.Payload), nextRetry)
 			}
 		} else {
 			toDelete = append(toDelete, fj.ID)
@@ -78,7 +78,7 @@ func (p *failedJobProcessor) commit(ctx context.Context, result *ProcessResult) 
 	if result.DeadLetter != nil && len(result.DeadLetter.jobs) > 0 {
 		err = p.c.queries.InsertDeadLetterBatch(ctx, tx, postgres.InsertDeadLetterBatchParams{
 			Ids:           result.DeadLetter.ids(),
-			Payloads:      result.DeadLetter.payloads(),
+			Payloads:      result.DeadLetter.payloadsString(),
 			ErrorMessages: make([]string, len(result.DeadLetter.jobs)),
 			RetryCounts:   result.DeadLetter.retries(),
 		})
@@ -91,7 +91,7 @@ func (p *failedJobProcessor) commit(ctx context.Context, result *ProcessResult) 
 	if result.ToRetry != nil && len(result.ToRetry.jobs) > 0 {
 		err = p.c.queries.InsertFailedBatch(ctx, tx, postgres.InsertFailedBatchParams{
 			Ids:           result.ToRetry.ids(),
-			Payloads:      result.ToRetry.payloads(),
+			Payloads:      result.ToRetry.payloadsString(),
 			ErrorMessages: make([]string, len(result.ToRetry.jobs)),
 			RetryCounts:   result.ToRetry.retries(),
 		})

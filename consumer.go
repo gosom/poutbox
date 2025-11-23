@@ -155,6 +155,15 @@ func (b *jobBatch) payloads() [][]byte {
 }
 
 //nolint:unused // marked as unused due to generics
+func (b *jobBatch) payloadsString() []string {
+	result := make([]string, len(b.jobs))
+	for i, j := range b.jobs {
+		result[i] = string(j.payload)
+	}
+	return result
+}
+
+//nolint:unused // marked as unused due to generics
 func (b *jobBatch) retries() []int32 {
 	result := make([]int32, len(b.jobs))
 	for i, j := range b.jobs {

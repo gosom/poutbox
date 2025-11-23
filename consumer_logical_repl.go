@@ -362,9 +362,14 @@ func (c *Consumer) storeFailedMessages(ctx context.Context, ids []int64, payload
 
 	errorMessages := make([]string, len(ids))
 
+	stringPayloads := make([]string, len(payloads))
+	for i, p := range payloads {
+		stringPayloads[i] = string(p)
+	}
+
 	err = c.queries.InsertFailedBatch(ctx, tx, postgres.InsertFailedBatchParams{
 		Ids:           ids,
-		Payloads:      payloads,
+		Payloads:      stringPayloads,
 		ErrorMessages: errorMessages,
 		RetryCounts:   retryCounts,
 	})

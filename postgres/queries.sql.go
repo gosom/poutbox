@@ -69,7 +69,7 @@ VALUES ($1)
 RETURNING id
 `
 
-func (q *Queries) EnqueueImmediate(ctx context.Context, db DBTX, payload []byte) (int64, error) {
+func (q *Queries) EnqueueImmediate(ctx context.Context, db DBTX, payload string) (int64, error) {
 	row := db.QueryRowContext(ctx, enqueueImmediate, payload)
 	var id int64
 	err := row.Scan(&id)
@@ -83,7 +83,7 @@ RETURNING id
 `
 
 type EnqueueScheduledParams struct {
-	Payload     []byte
+	Payload     string
 	ScheduledAt time.Time
 }
 
@@ -215,7 +215,7 @@ LIMIT $1
 
 type GetScheduledJobsReadyRow struct {
 	ID          int64
-	Payload     []byte
+	Payload     string
 	ScheduledAt time.Time
 }
 
@@ -224,10 +224,7 @@ func (q *Queries) GetScheduledJobsReady(ctx context.Context, db DBTX, batchSize 
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
-
+	defer rows.Close()
 	var items []GetScheduledJobsReadyRow
 	for rows.Next() {
 		var i GetScheduledJobsReadyRow
@@ -252,7 +249,7 @@ VALUES ($1::bigint, $2, $3, $4, NOW() AT TIME ZONE 'UTC')
 
 type InsertDeadLetterParams struct {
 	ID           int64
-	Payload      []byte
+	Payload      string
 	ErrorMessage sql.NullString
 	RetryCount   int32
 }
@@ -273,7 +270,7 @@ SELECT t.id, t.payload, t.error_message, t.retry_count, NOW() AT TIME ZONE 'UTC'
 FROM (
   SELECT
     UNNEST($1::bigint[]) as id,
-    UNNEST($2::bytea[]) as payload,
+    UNNEST($2::text[]) as payload,
     UNNEST($3::text[]) as error_message,
     UNNEST($4::integer[]) as retry_count
 ) t
@@ -281,7 +278,7 @@ FROM (
 
 type InsertDeadLetterBatchParams struct {
 	Ids           []int64
-	Payloads      [][]byte
+	Payloads      []string
 	ErrorMessages []string
 	RetryCounts   []int32
 }
@@ -307,7 +304,7 @@ ON CONFLICT (id) DO UPDATE SET
 
 type InsertFailedParams struct {
 	ID           int64
-	Payload      []byte
+	Payload      string
 	ErrorMessage sql.NullString
 	RetryCount   int32
 }
@@ -328,7 +325,7 @@ SELECT t.id, t.payload, t.error_message, t.retry_count, NOW() AT TIME ZONE 'UTC'
 FROM (
   SELECT
     UNNEST($1::bigint[]) as id,
-    UNNEST($2::bytea[]) as payload,
+    UNNEST($2::text[]) as payload,
     UNNEST($3::text[]) as error_message,
     UNNEST($4::integer[]) as retry_count
 ) t
@@ -340,7 +337,7 @@ ON CONFLICT (id) DO UPDATE SET
 
 type InsertFailedBatchParams struct {
 	Ids           []int64
-	Payloads      [][]byte
+	Payloads      []string
 	ErrorMessages []string
 	RetryCounts   []int32
 }
@@ -438,22 +435,5 @@ type UpdateFailedParams struct {
 
 func (q *Queries) UpdateFailed(ctx context.Context, db DBTX, arg UpdateFailedParams) error {
 	_, err := db.ExecContext(ctx, updateFailed, arg.ErrorMessage, arg.RetryCount, arg.ID)
-	return err
-}
-
-const updateScheduledCursor = `-- name: UpdateScheduledCursor :exec
-UPDATE "poutbox".cursor
-SET last_processed_transaction_id = $1::xid8, last_processed_scheduled_id = $2::bigint, last_processed_scheduled_at = $3::timestamptz, updated_at = NOW() AT TIME ZONE 'UTC'
-WHERE id = 1
-`
-
-type UpdateScheduledCursorParams struct {
-	LastProcessedTransactionID int64
-	LastProcessedScheduledID   int64
-	LastProcessedScheduledAt   time.Time
-}
-
-func (q *Queries) UpdateScheduledCursor(ctx context.Context, db DBTX, arg UpdateScheduledCursorParams) error {
-	_, err := db.ExecContext(ctx, updateScheduledCursor, arg.LastProcessedTransactionID, arg.LastProcessedScheduledID, arg.LastProcessedScheduledAt)
 	return err
 }

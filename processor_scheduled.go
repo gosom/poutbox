@@ -27,7 +27,7 @@ func (p *scheduledJobProcessor) toHandlerJobs(jobs []postgres.GetScheduledJobsRe
 	for i, sj := range jobs {
 		handlerJobs[i] = HandlerJob{
 			ID:      sj.ID,
-			Payload: sj.Payload,
+			Payload: []byte(sj.Payload),
 		}
 	}
 
@@ -42,7 +42,7 @@ func (p *scheduledJobProcessor) processResults(jobs []postgres.GetScheduledJobsR
 	for _, sj := range jobs {
 		toDelete = append(toDelete, sj.ID)
 		if failedSet[sj.ID] {
-			failedBatch.add(sj.ID, sj.Payload, 1)
+			failedBatch.add(sj.ID, []byte(sj.Payload), 1)
 		}
 	}
 
@@ -73,7 +73,7 @@ func (p *scheduledJobProcessor) commit(ctx context.Context, result *ProcessResul
 	if result.ToRetry != nil && len(result.ToRetry.jobs) > 0 {
 		err = p.c.queries.InsertFailedBatch(ctx, tx, postgres.InsertFailedBatchParams{
 			Ids:           result.ToRetry.ids(),
-			Payloads:      result.ToRetry.payloads(),
+			Payloads:      result.ToRetry.payloadsString(),
 			ErrorMessages: make([]string, len(result.ToRetry.jobs)),
 			RetryCounts:   result.ToRetry.retries(),
 		})

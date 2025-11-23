@@ -19,7 +19,7 @@ type PoutboxCursor struct {
 
 type PoutboxDeadLetter struct {
 	ID           int64
-	Payload      []byte
+	Payload      string
 	ErrorMessage sql.NullString
 	RetryCount   int32
 	FailedAt     time.Time
@@ -28,7 +28,7 @@ type PoutboxDeadLetter struct {
 
 type PoutboxFailed struct {
 	ID           int64
-	Payload      []byte
+	Payload      string
 	ErrorMessage sql.NullString
 	RetryCount   int32
 	FailedAt     time.Time
@@ -37,7 +37,7 @@ type PoutboxFailed struct {
 
 type PoutboxImmediate struct {
 	ID            int64
-	Payload       []byte
+	Payload       string
 	CreatedAt     time.Time
 	TransactionID int64
 }
@@ -50,9 +50,8 @@ type PoutboxPartitionMetum struct {
 }
 
 type PoutboxScheduled struct {
-	ID           int64
-	Payload      []byte
-	ScheduledAt  time.Time
-	CreatedAt    time.Time
-	ErrorMessage sql.NullString
+	ID          int64
+	Payload     string
+	ScheduledAt time.Time
+	CreatedAt   time.Time
 }

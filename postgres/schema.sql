@@ -55,8 +55,7 @@ CREATE TABLE IF NOT EXISTS "poutbox".scheduled (
 	id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 	payload TEXT NOT NULL,
 	scheduled_at TIMESTAMPTZ(6) NOT NULL,
-	created_at TIMESTAMPTZ(6) NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC'),
-	error_message TEXT
+	created_at TIMESTAMPTZ(6) NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC')
 );
 
 CREATE INDEX IF NOT EXISTS scheduled_ready_idx ON "poutbox".scheduled (scheduled_at, id);
