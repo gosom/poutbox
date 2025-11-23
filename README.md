@@ -23,8 +23,8 @@ The difficulty is keeping the database and message queue in sync. Consider this 
 ```go
 tx := startTransaction()
 order := createOrder(tx)
-publish_to_queue(order)  // What if this fails?
 commit(tx)
+publish_to_queue(order)  // What if this fails?
 ```
 
 If `publish_to_queue` fails, the order is saved but the background task is lost.
