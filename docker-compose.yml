@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: poutbox
+      POSTGRES_PASSWORD: poutbox
+      POSTGRES_DB: poutbox
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - poutboxdata:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/postgres-init.sql
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "max_replication_slots=10"
+
+volumes:
+  poutboxdata:

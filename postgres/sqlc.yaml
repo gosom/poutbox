@@ -1,0 +1,16 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "queries.sql"
+    schema: "schema.sql"
+    gen:
+      go:
+        out: "."
+        package: "postgres"
+        sql_package: "database/sql"
+        emit_methods_with_db_argument: true
+        overrides:
+          - db_type: "bigint"
+            go_type: "int64"
+          - db_type: "xid8"
+            go_type: "int64"
