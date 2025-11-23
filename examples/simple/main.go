@@ -108,7 +108,8 @@ func runClient(ctx context.Context, db *sql.DB) error {
 				_, err := client.Enqueue(ctx, map[string]any{
 					"message": "Hello poutbox",
 					"count":   n,
-				})
+				},
+				)
 				if err != nil && !errors.Is(err, context.Canceled) {
 					log.Printf("failed to enqueue job: %v", err)
 				}
@@ -119,6 +120,50 @@ func runClient(ctx context.Context, db *sql.DB) error {
 	wg.Wait()
 
 	return nil
+}
+
+func runConsumer(ctx context.Context, db *sql.DB) error {
+	handler := createJobHandler("jobs.txt")
+
+	config := poutbox.ConsumerConfig{
+		BatchSize:    1000,
+		MaxRetries:   3,
+		PollInterval: 100 * time.Millisecond,
+	}
+	consumer := poutbox.NewConsumer(db, handler, config)
+
+	return consumer.Start(ctx)
+}
+
+func runConsumerLogicalRepl(ctx context.Context, db *sql.DB, connStr string) error {
+	handler := createJobHandler("jobs_logical_repl.txt")
+
+	config := poutbox.ConsumerConfig{
+		BatchSize:             1000,
+		MaxRetries:            3,
+		PollInterval:          100 * time.Millisecond,
+		UseLogicalReplication: true,
+		LogicalReplBatchSize:  1000,
+	}
+
+	replConnStr := connStr
+	if !strings.Contains(connStr, "replication=") {
+		if strings.Contains(connStr, "?") {
+			replConnStr = connStr + "&replication=database"
+		} else {
+			replConnStr = connStr + "?replication=database"
+		}
+	}
+
+	consumer := poutbox.NewConsumer(db, handler, config)
+	consumer.SetReplicationConnString(replConnStr)
+	defer func() {
+		_ = consumer.Close(context.WithoutCancel(ctx))
+	}()
+
+	log.Println("Starting consumer with logical replication...")
+
+	return consumer.Start(ctx)
 }
 
 type fileJobHandler struct {
@@ -174,48 +219,4 @@ func createJobHandler(filename string) poutbox.Handler {
 	}
 
 	return &ans
-}
-
-func runConsumer(ctx context.Context, db *sql.DB) error {
-	handler := createJobHandler("jobs.txt")
-
-	config := poutbox.ConsumerConfig{
-		BatchSize:    1000,
-		MaxRetries:   3,
-		PollInterval: 100 * time.Millisecond,
-	}
-	consumer := poutbox.NewConsumer(db, handler, config)
-
-	return consumer.Start(ctx)
-}
-
-func runConsumerLogicalRepl(ctx context.Context, db *sql.DB, connStr string) error {
-	handler := createJobHandler("jobs_logical_repl.txt")
-
-	config := poutbox.ConsumerConfig{
-		BatchSize:             1000,
-		MaxRetries:            3,
-		PollInterval:          100 * time.Millisecond,
-		UseLogicalReplication: true,
-		LogicalReplBatchSize:  1000,
-	}
-
-	replConnStr := connStr
-	if !strings.Contains(connStr, "replication=") {
-		if strings.Contains(connStr, "?") {
-			replConnStr = connStr + "&replication=database"
-		} else {
-			replConnStr = connStr + "?replication=database"
-		}
-	}
-
-	consumer := poutbox.NewConsumer(db, handler, config)
-	consumer.SetReplicationConnString(replConnStr)
-	defer func() {
-		_ = consumer.Close(context.WithoutCancel(ctx))
-	}()
-
-	log.Println("Starting consumer with logical replication...")
-
-	return consumer.Start(ctx)
 }

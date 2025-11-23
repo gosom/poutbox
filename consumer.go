@@ -113,6 +113,7 @@ func (c *Consumer) Close(ctx context.Context) error {
 	return c.handler.Close(ctx)
 }
 
+//nolint:unused // marked as unused due to generics
 type job struct {
 	id      int64
 	payload []byte
@@ -120,7 +121,14 @@ type job struct {
 }
 
 type jobBatch struct {
-	jobs []job
+	jobs []job //nolint:unused // marked as unused due to generics
+}
+
+type ProcessResult struct {
+	DeadLetter *jobBatch
+	ToRetry    *jobBatch
+	ToDelete   []int64
+	Cursor     *postgres.UpdateCursorParams
 }
 
 //nolint:unused // marked as unused due to generics
@@ -128,6 +136,7 @@ func (b *jobBatch) add(id int64, payload []byte, retry int32) {
 	b.jobs = append(b.jobs, job{id, payload, retry})
 }
 
+//nolint:unused // marked as unused due to generics
 func (b *jobBatch) ids() []int64 {
 	result := make([]int64, len(b.jobs))
 	for i, j := range b.jobs {
@@ -136,6 +145,7 @@ func (b *jobBatch) ids() []int64 {
 	return result
 }
 
+//nolint:unused // marked as unused due to generics
 func (b *jobBatch) payloads() [][]byte {
 	result := make([][]byte, len(b.jobs))
 	for i, j := range b.jobs {
@@ -144,6 +154,7 @@ func (b *jobBatch) payloads() [][]byte {
 	return result
 }
 
+//nolint:unused // marked as unused due to generics
 func (b *jobBatch) retries() []int32 {
 	result := make([]int32, len(b.jobs))
 	for i, j := range b.jobs {
@@ -161,71 +172,14 @@ func (c *Consumer) sleepOrDone(ctx context.Context) error {
 	}
 }
 
-func (c *Consumer) commitBatches(ctx context.Context, deadLetter *jobBatch, toRetry *jobBatch, toDelete []int64, cursor *postgres.UpdateCursorParams) error {
-	tx, err := c.db.BeginTx(ctx, nil)
-	if err != nil {
-		log.Printf("failed to begin transaction: %v", err)
-		return err
-	}
-
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	if deadLetter != nil && len(deadLetter.jobs) > 0 {
-		err = c.queries.InsertDeadLetterBatch(ctx, tx, postgres.InsertDeadLetterBatchParams{
-			Ids:           deadLetter.ids(),
-			Payloads:      deadLetter.payloads(),
-			ErrorMessages: make([]string, len(deadLetter.jobs)),
-			RetryCounts:   deadLetter.retries(),
-		})
-		if err != nil {
-			log.Printf("failed to insert dead letters batch: %v", err)
-			return err
-		}
-	}
-
-	if toRetry != nil && len(toRetry.jobs) > 0 {
-		err = c.queries.InsertFailedBatch(ctx, tx, postgres.InsertFailedBatchParams{
-			Ids:           toRetry.ids(),
-			Payloads:      toRetry.payloads(),
-			ErrorMessages: make([]string, len(toRetry.jobs)),
-			RetryCounts:   toRetry.retries(),
-		})
-		if err != nil {
-			log.Printf("failed to insert failed jobs batch: %v", err)
-			return err
-		}
-	}
-
-	if len(toDelete) > 0 {
-		err = c.queries.DeleteFailedBatch(ctx, tx, toDelete)
-		if err != nil {
-			log.Printf("failed to delete failed jobs batch: %v", err)
-			return err
-		}
-	}
-
-	if cursor != nil {
-		err = c.queries.UpdateCursor(ctx, tx, *cursor)
-		if err != nil {
-			log.Printf("failed to update cursor: %v", err)
-			return err
-		}
-	}
-
-	return tx.Commit()
-}
-
 type jobProcessor[T any] interface {
 	fetch(ctx context.Context) ([]T, error)
 	toHandlerJobs(jobs []T) []HandlerJob
-	processResults(jobs []T, failedSet map[int64]bool) (deadLetter *jobBatch, toRetry *jobBatch, toDelete []int64, cursor *postgres.UpdateCursorParams)
-	shouldCommit(deadLetter *jobBatch, toRetry *jobBatch, toDelete []int64, cursor *postgres.UpdateCursorParams) bool
-	updateCursor(cursor *postgres.UpdateCursorParams)
+	processResults(jobs []T, failedSet map[int64]bool) *ProcessResult
+	commit(ctx context.Context, result *ProcessResult) error
 }
 
-func processJobs[T any](ctx context.Context, c *Consumer, proc jobProcessor[T]) error {
+func processJobs[T any, P jobProcessor[T]](ctx context.Context, c *Consumer, proc P) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -239,6 +193,7 @@ func processJobs[T any](ctx context.Context, c *Consumer, proc jobProcessor[T]) 
 			if err := c.sleepOrDone(ctx); err != nil {
 				return err
 			}
+
 			continue
 		}
 
@@ -246,6 +201,7 @@ func processJobs[T any](ctx context.Context, c *Consumer, proc jobProcessor[T]) 
 			if err := c.sleepOrDone(ctx); err != nil {
 				return err
 			}
+
 			continue
 		}
 
@@ -257,13 +213,12 @@ func processJobs[T any](ctx context.Context, c *Consumer, proc jobProcessor[T]) 
 			failedSet[id] = true
 		}
 
-		deadLetter, toRetry, toDelete, cursor := proc.processResults(jobs, failedSet)
+		result := proc.processResults(jobs, failedSet)
 
-		if proc.shouldCommit(deadLetter, toRetry, toDelete, cursor) {
-			if err := c.commitBatches(ctx, deadLetter, toRetry, toDelete, cursor); err != nil {
-				continue
-			}
-			proc.updateCursor(cursor)
+		if err := proc.commit(ctx, result); err != nil {
+			log.Printf("commit failed: %v", err)
+
+			continue
 		}
 	}
 }

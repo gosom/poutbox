@@ -2,6 +2,7 @@ package poutbox
 
 import (
 	"context"
+	"log"
 
 	"poutbox/postgres"
 )
@@ -12,7 +13,12 @@ type scheduledJobProcessor struct {
 
 //nolint:unused // marked as unused due to generics
 func (p *scheduledJobProcessor) fetch(ctx context.Context) ([]postgres.GetScheduledJobsReadyRow, error) {
-	return p.c.queries.GetScheduledJobsReady(ctx, p.c.db, p.c.config.BatchSize)
+	jobs, err := p.c.queries.GetScheduledJobsReady(ctx, p.c.db, p.c.config.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+
+	return jobs, nil
 }
 
 //nolint:unused // marked as unused due to generics
@@ -24,11 +30,12 @@ func (p *scheduledJobProcessor) toHandlerJobs(jobs []postgres.GetScheduledJobsRe
 			Payload: sj.Payload,
 		}
 	}
+
 	return handlerJobs
 }
 
 //nolint:unused // marked as unused due to generics
-func (p *scheduledJobProcessor) processResults(jobs []postgres.GetScheduledJobsReadyRow, failedSet map[int64]bool) (*jobBatch, *jobBatch, []int64, *postgres.UpdateCursorParams) {
+func (p *scheduledJobProcessor) processResults(jobs []postgres.GetScheduledJobsReadyRow, failedSet map[int64]bool) *ProcessResult {
 	failedBatch := &jobBatch{}
 	var toDelete []int64
 
@@ -39,13 +46,50 @@ func (p *scheduledJobProcessor) processResults(jobs []postgres.GetScheduledJobsR
 		}
 	}
 
-	return nil, failedBatch, toDelete, nil
+	return &ProcessResult{
+		DeadLetter: nil,
+		ToRetry:    failedBatch,
+		ToDelete:   toDelete,
+		Cursor:     nil,
+	}
 }
 
 //nolint:unused // marked as unused due to generics
-func (p *scheduledJobProcessor) shouldCommit(deadLetter *jobBatch, toRetry *jobBatch, toDelete []int64, cursor *postgres.UpdateCursorParams) bool {
-	return (toRetry != nil && len(toRetry.jobs) > 0) || len(toDelete) > 0
-}
+func (p *scheduledJobProcessor) commit(ctx context.Context, result *ProcessResult) error {
+	if (result.ToRetry == nil || len(result.ToRetry.jobs) == 0) && len(result.ToDelete) == 0 {
+		return nil
+	}
 
-//nolint:unused // marked as unused due to generics
-func (p *scheduledJobProcessor) updateCursor(_ *postgres.UpdateCursorParams) {}
+	tx, err := p.c.db.BeginTx(ctx, nil)
+	if err != nil {
+		log.Printf("failed to begin transaction: %v", err)
+		return err
+	}
+
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	if result.ToRetry != nil && len(result.ToRetry.jobs) > 0 {
+		err = p.c.queries.InsertFailedBatch(ctx, tx, postgres.InsertFailedBatchParams{
+			Ids:           result.ToRetry.ids(),
+			Payloads:      result.ToRetry.payloads(),
+			ErrorMessages: make([]string, len(result.ToRetry.jobs)),
+			RetryCounts:   result.ToRetry.retries(),
+		})
+		if err != nil {
+			log.Printf("failed to insert failed jobs batch: %v", err)
+			return err
+		}
+	}
+
+	if len(result.ToDelete) > 0 {
+		err = p.c.queries.DeleteScheduledBatch(ctx, tx, result.ToDelete)
+		if err != nil {
+			log.Printf("failed to delete scheduled jobs batch: %v", err)
+			return err
+		}
+	}
+
+	return tx.Commit()
+}

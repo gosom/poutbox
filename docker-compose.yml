@@ -9,7 +9,6 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - poutboxdata:/var/lib/postgresql/data
-      - ./postgres-init.sql:/docker-entrypoint-initdb.d/postgres-init.sql
     command:
       - "postgres"
       - "-c"

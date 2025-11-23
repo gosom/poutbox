@@ -8,6 +8,12 @@ INSERT INTO "poutbox".scheduled (payload, scheduled_at)
 VALUES ($1, $2)
 RETURNING id;
 
+-- name: GetScheduleAtForIDs :many
+SELECT id, schedule_at FROM immediate WHERE id = ANY($1);
+
+-- name: DeleteScheduledBatch :exec
+DELETE FROM scheduled WHERE id = ANY($1);
+
 -- name: InsertPartitionMeta :exec
 INSERT INTO "poutbox".partition_meta (partition_name, range_start, range_end)
 VALUES ($1, $2, $3)
