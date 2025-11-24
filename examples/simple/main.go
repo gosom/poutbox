@@ -143,7 +143,6 @@ func runConsumerLogicalRepl(ctx context.Context, db *sql.DB, connStr string) err
 		MaxRetries:            3,
 		PollInterval:          100 * time.Millisecond,
 		UseLogicalReplication: true,
-		LogicalReplBatchSize:  1000,
 	}
 
 	replConnStr := connStr

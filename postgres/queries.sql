@@ -117,3 +117,4 @@ LIMIT @batch_size;
 -- name: DeleteScheduledBatch :exec
 DELETE FROM "poutbox".scheduled
 WHERE id = ANY(@ids::bigint[]);
+

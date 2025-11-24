@@ -133,7 +133,6 @@ Results are written to `jobs_logical_repl.txt`.
 - **Dead letter queue** - failed jobs go here for manual review
 - **Zero table bloat** - immediate jobs are removed without creating dead tuples
 - **Two consumption modes** - polling or logical replication
-- **Concurrent safe** - works with multiple consumers
 
 ## Performance
 

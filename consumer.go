@@ -26,16 +26,14 @@ type ConsumerConfig struct {
 	MaxRetries            int32
 	PollInterval          time.Duration
 	UseLogicalReplication bool
-	LogicalReplBatchSize  int
 }
 
 type Consumer struct {
-	db               *sql.DB
-	config           ConsumerConfig
-	handler          Handler
-	queries          *postgres.Queries
-	replConnStr      string
-	lastProcessedLSN postgres.LSN
+	db          *sql.DB
+	config      ConsumerConfig
+	handler     Handler
+	queries     *postgres.Queries
+	replConnStr string
 }
 
 func NewConsumer(db *sql.DB, handler Handler, config ConsumerConfig) *Consumer {
@@ -47,10 +45,6 @@ func NewConsumer(db *sql.DB, handler Handler, config ConsumerConfig) *Consumer {
 	}
 	if config.PollInterval <= 0 {
 		config.PollInterval = 100 * time.Millisecond
-	}
-
-	if config.LogicalReplBatchSize <= 0 {
-		config.LogicalReplBatchSize = 100
 	}
 
 	return &Consumer{
