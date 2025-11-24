@@ -57,11 +57,12 @@ Then a background process reads jobs from the outbox table and publishes them to
 
 Poutbox manages three tables:
 
-1. **outbox** - stores jobs to be processed, partitioned by created_at
-2. **outbox_scheduled** - stores jobs scheduled for future execution
-3. **outbox_dead_letter** - stores jobs that failed after max retries
+1. **immediate** - stores jobs to be processed, partitioned by created_at
+2. **scheduled** - stores jobs scheduled for future execution
+3. **failed** - stores jobs that failed from immediate or scheduled tables
+4. **dead_letter** - stores jobs that failed after max retries
 
-The outbox table is partitioned by created_at to prevent unbounded growth. You can use the `Maintenance` struct to manage partitions automatically, or implement your own partition management. If you skip partitioning, you must manage deletions manually.
+The immediate table is partitioned by created_at to prevent unbounded growth. You can use the `Maintenance` struct to manage partitions automatically, or implement your own partition management. If you skip partitioning, you must manage deletions manually.
 
 The library provides two ways to detect new jobs:
 
