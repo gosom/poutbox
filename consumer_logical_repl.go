@@ -29,8 +29,6 @@ func (c *Consumer) processImmediateLogicalRepl(ctx context.Context) error {
 		return errors.New("replication connection string not set")
 	}
 
-	batchSize := c.validateBatchSize(c.config.LogicalReplBatchSize)
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -38,7 +36,7 @@ func (c *Consumer) processImmediateLogicalRepl(ctx context.Context) error {
 		default:
 		}
 
-		if err := c.runLogicalReplicationSession(ctx, batchSize); err != nil {
+		if err := c.runLogicalReplicationSession(ctx, c.config.LogicalReplBatchSize); err != nil {
 			if errors.Is(err, context.Canceled) {
 				return err
 			}
@@ -53,14 +51,6 @@ func (c *Consumer) processImmediateLogicalRepl(ctx context.Context) error {
 			}
 		}
 	}
-}
-
-func (c *Consumer) validateBatchSize(configSize int) int {
-	if configSize <= 0 {
-		return 100
-	}
-
-	return configSize
 }
 
 func (c *Consumer) runLogicalReplicationSession(ctx context.Context, batchSize int) error {

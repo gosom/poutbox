@@ -49,6 +49,10 @@ func NewConsumer(db *sql.DB, handler Handler, config ConsumerConfig) *Consumer {
 		config.PollInterval = 100 * time.Millisecond
 	}
 
+	if config.LogicalReplBatchSize <= 0 {
+		config.LogicalReplBatchSize = 100
+	}
+
 	return &Consumer{
 		db:      db,
 		handler: handler,
@@ -141,15 +145,6 @@ func (b *jobBatch) ids() []int64 {
 	result := make([]int64, len(b.jobs))
 	for i, j := range b.jobs {
 		result[i] = j.id
-	}
-	return result
-}
-
-//nolint:unused // marked as unused due to generics
-func (b *jobBatch) payloads() [][]byte {
-	result := make([][]byte, len(b.jobs))
-	for i, j := range b.jobs {
-		result[i] = j.payload
 	}
 	return result
 }
