@@ -19,8 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"poutbox"
-
+	"github.com/gosom/poutbox"
 	"github.com/gosom/poutbox/postgres"
 )
 
