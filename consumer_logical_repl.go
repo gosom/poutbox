@@ -2,6 +2,7 @@ package poutbox
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 	"time"
@@ -51,7 +52,17 @@ func (c *Consumer) runLogicalReplicationSession(ctx context.Context) error {
 	batchSize := int(c.config.BatchSize)
 	log.Printf("Starting logical replication session with batch size %d", batchSize)
 
-	stream, err := postgres.NewReplicationStream(ctx, c.replConnStr, postgres.LSN(0))
+	cursor, err := c.queries.GetCursor(ctx, c.db)
+	if err != nil {
+		log.Printf("Failed to get cursor: %v", err)
+		return err
+	}
+
+	if cursor.LastLsn == "" {
+		cursor.LastLsn = "0/0"
+	}
+
+	stream, err := postgres.NewReplicationStream(ctx, c.replConnStr, cursor.LastLsn)
 	if err != nil {
 		log.Printf("Failed to create replication stream: %v", err)
 
@@ -70,9 +81,6 @@ func (c *Consumer) runLogicalReplicationSession(ctx context.Context) error {
 		lastProcessedLSN postgres.LSN
 		lastFlushedTime  = time.Now()
 	)
-
-	defer func() {
-	}()
 
 	for event, err := range stream.Events(ctx) {
 		if err != nil {
@@ -118,7 +126,7 @@ func (c *Consumer) runLogicalReplicationSession(ctx context.Context) error {
 				return err
 			}
 
-			log.Printf("Responded to keepalive request up to LSN %d", lastProcessedLSN)
+			log.Printf("Responded to keepalive request up to LSN %s", lastProcessedLSN)
 		} else if flushed {
 			if err := stream.SendKeepalive(ctx, lastProcessedLSN); err != nil {
 				log.Printf("Failed to send keepalive response: %v", err)
@@ -140,7 +148,10 @@ func (c *Consumer) processBatch(ctx context.Context, batch []*postgres.LogicalRe
 	failedIDs := c.handler.Handle(ctx, handlerJobs)
 	failedSet := c.createFailedSet(failedIDs)
 
-	var maxLSN postgres.LSN
+	var (
+		maxLSN                           postgres.LSN
+		maxChangeByTransactionIDAndIDPos int
+	)
 
 	var (
 		toRetry         []int64
@@ -152,6 +163,13 @@ func (c *Consumer) processBatch(ctx context.Context, batch []*postgres.LogicalRe
 			maxLSN = batch[i].LSN
 		}
 
+		if c.config.UpdateCursorOnLogicalRepl {
+			if batch[i].TransactionID > batch[maxChangeByTransactionIDAndIDPos].TransactionID ||
+				(batch[i].TransactionID == batch[maxChangeByTransactionIDAndIDPos].TransactionID && batch[i].ID > batch[maxChangeByTransactionIDAndIDPos].ID) {
+				maxChangeByTransactionIDAndIDPos = i
+			}
+		}
+
 		failed := failedSet[batch[i].ID]
 		if failed {
 			toRetry = append(toRetry, batch[i].ID)
@@ -159,8 +177,39 @@ func (c *Consumer) processBatch(ctx context.Context, batch []*postgres.LogicalRe
 		}
 	}
 
-	if len(toRetry) > 0 {
-		if err := c.storeFailedMessages(ctx, toRetry, toRetryPayloads); err != nil {
+	if c.config.UpdateCursorOnLogicalRepl || len(toRetry) > 0 {
+		tx, err := c.db.BeginTx(ctx, nil)
+		defer func() {
+			_ = tx.Rollback()
+		}()
+
+		if err != nil {
+			return 0, err
+		}
+
+		if len(toRetry) > 0 {
+			if err := c.storeFailedMessages(ctx, tx, toRetry, toRetryPayloads); err != nil {
+				log.Printf("failed to store failed messages: %v", err)
+				return 0, err
+			}
+		}
+
+		if c.config.UpdateCursorOnLogicalRepl {
+			cursorParams := postgres.UpdateCursorParams{
+				LastProcessedID:            batch[maxChangeByTransactionIDAndIDPos].ID,
+				LastProcessedAt:            batch[maxChangeByTransactionIDAndIDPos].CreatedAt,
+				LastProcessedTransactionID: batch[maxChangeByTransactionIDAndIDPos].TransactionID,
+				LastLsn:                    maxLSN.String(),
+			}
+
+			err = c.queries.UpdateCursor(ctx, tx, cursorParams)
+			if err != nil {
+				log.Printf("failed to update cursor: %v", err)
+				return 0, err
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
 			return 0, err
 		}
 	}
@@ -177,40 +226,21 @@ func (c *Consumer) createFailedSet(failedIDs []int64) map[int64]bool {
 	return failedSet
 }
 
-func (c *Consumer) storeFailedMessages(ctx context.Context, ids []int64, payloads [][]byte) error {
-	tx, err := c.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
+func (c *Consumer) storeFailedMessages(ctx context.Context, tx *sql.Tx, ids []int64, payloads [][]byte) error {
 	retryCounts := make([]int32, len(ids))
-	for i := range retryCounts {
-		retryCounts[i] = 0
-	}
-
 	errorMessages := make([]string, len(ids))
-
 	stringPayloads := make([]string, len(payloads))
+
 	for i, p := range payloads {
 		stringPayloads[i] = string(p)
 	}
 
-	err = c.queries.InsertFailedBatch(ctx, tx, postgres.InsertFailedBatchParams{
+	err := c.queries.InsertFailedBatch(ctx, tx, postgres.InsertFailedBatchParams{
 		Ids:           ids,
 		Payloads:      stringPayloads,
 		ErrorMessages: errorMessages,
 		RetryCounts:   retryCounts,
 	})
-	if err != nil {
-		return err
-	}
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }

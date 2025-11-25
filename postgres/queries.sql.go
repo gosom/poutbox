@@ -95,7 +95,7 @@ func (q *Queries) EnqueueScheduled(ctx context.Context, db DBTX, arg EnqueueSche
 }
 
 const getCursor = `-- name: GetCursor :one
-SELECT id, last_processed_id, last_processed_at, last_processed_transaction_id, updated_at
+SELECT id, last_processed_id, last_processed_at, last_processed_transaction_id, last_lsn, updated_at
 FROM "poutbox".cursor
 WHERE id = 1
 `
@@ -108,6 +108,7 @@ func (q *Queries) GetCursor(ctx context.Context, db DBTX) (PoutboxCursor, error)
 		&i.LastProcessedID,
 		&i.LastProcessedAt,
 		&i.LastProcessedTransactionID,
+		&i.LastLsn,
 		&i.UpdatedAt,
 	)
 	return i, err
@@ -152,7 +153,7 @@ func (q *Queries) GetFailedJobsReady(ctx context.Context, db DBTX, batchSize int
 }
 
 const getImmediateJobs = `-- name: GetImmediateJobs :many
-SELECT id, payload, created_at, transaction_id
+SELECT id, payload, created_at, transaction_id, commit_lsn
 FROM "poutbox".immediate
 WHERE
   created_at >= $1::timestamptz
@@ -191,6 +192,7 @@ func (q *Queries) GetImmediateJobs(ctx context.Context, db DBTX, arg GetImmediat
 			&i.Payload,
 			&i.CreatedAt,
 			&i.TransactionID,
+			&i.CommitLsn,
 		); err != nil {
 			return nil, err
 		}
@@ -406,7 +408,12 @@ func (q *Queries) ListPartitions(ctx context.Context, db DBTX) ([]ListPartitions
 
 const updateCursor = `-- name: UpdateCursor :exec
 UPDATE "poutbox".cursor
-SET last_processed_id = $1::bigint, last_processed_at = $2::timestamptz, last_processed_transaction_id = $3::bigint, updated_at = NOW() AT TIME ZONE 'UTC'
+SET 
+last_processed_id = $1::bigint, 
+last_processed_at = $2::timestamptz, 
+last_processed_transaction_id = $3::bigint, 
+last_lsn = $4,
+updated_at = NOW() AT TIME ZONE 'UTC'
 WHERE id = 1
 `
 
@@ -414,10 +421,16 @@ type UpdateCursorParams struct {
 	LastProcessedID            int64
 	LastProcessedAt            time.Time
 	LastProcessedTransactionID int64
+	LastLsn                    string
 }
 
 func (q *Queries) UpdateCursor(ctx context.Context, db DBTX, arg UpdateCursorParams) error {
-	_, err := db.ExecContext(ctx, updateCursor, arg.LastProcessedID, arg.LastProcessedAt, arg.LastProcessedTransactionID)
+	_, err := db.ExecContext(ctx, updateCursor,
+		arg.LastProcessedID,
+		arg.LastProcessedAt,
+		arg.LastProcessedTransactionID,
+		arg.LastLsn,
+	)
 	return err
 }
 

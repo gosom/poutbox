@@ -36,25 +36,30 @@ type ReplicationStream struct {
 	serverWALEnd LSN
 }
 
-func NewReplicationStream(ctx context.Context, connStr string, startLSN LSN) (*ReplicationStream, error) {
+func NewReplicationStream(ctx context.Context, connStr string, startLSN string) (*ReplicationStream, error) {
 	conn, err := pgconn.Connect(ctx, connStr)
 	if err != nil {
 		return nil, err
 	}
 
 	if _, err := pglogrepl.IdentifySystem(ctx, conn); err != nil {
-		conn.Close(ctx)
+		_ = conn.Close(ctx)
 		return nil, err
 	}
 
-	if err := pglogrepl.StartReplication(ctx, conn, ReplicationSlot, startLSN, pglogrepl.StartReplicationOptions{
+	startingPoint, err := pglogrepl.ParseLSN(startLSN)
+	if err != nil {
+		return nil, fmt.Errorf("invalid start LSN: %w", err)
+	}
+
+	if err := pglogrepl.StartReplication(ctx, conn, ReplicationSlot, startingPoint, pglogrepl.StartReplicationOptions{
 		PluginArgs: []string{
 			"proto_version '2'",
 			"publication_names '" + PublicationName + "'",
 			"messages 'off'",
 		},
 	}); err != nil {
-		conn.Close(ctx)
+		_ = conn.Close(ctx)
 		return nil, err
 	}
 
@@ -189,7 +194,7 @@ func (rs *ReplicationStream) Events(ctx context.Context) iter.Seq2[ReplicationEv
 
 func (rs *ReplicationStream) SendKeepalive(ctx context.Context, walApplyPosition LSN) error {
 	// when we restart the application, the context will be cancelled.
-	// this will cause not sending the status update, so the already procesed WAL
+	// this will cause not sending the status update, so the already proccesed WAL
 	// will be re-sent by PostgreSQL when the application restarts.
 	// This will cause duplicate processing of some messages
 	// so we use a context without cancellation here and it's own timeout.

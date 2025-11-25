@@ -45,6 +45,7 @@ func (p *immediateJobProcessor) processResults(jobs []postgres.PoutboxImmediate,
 		lastProcessedID            int64
 		lastProcessedTime          time.Time
 		lastProcessedTransactionID int64
+		lastCommitLSN              string
 	)
 
 	if len(jobs) > 0 {
@@ -52,6 +53,7 @@ func (p *immediateJobProcessor) processResults(jobs []postgres.PoutboxImmediate,
 		lastProcessedID = lastJob.ID
 		lastProcessedTime = lastJob.CreatedAt
 		lastProcessedTransactionID = lastJob.TransactionID
+		lastCommitLSN = lastJob.CommitLsn
 
 		for _, ij := range jobs {
 			if failedSet[ij.ID] {
@@ -68,6 +70,7 @@ func (p *immediateJobProcessor) processResults(jobs []postgres.PoutboxImmediate,
 		LastProcessedID:            lastProcessedID,
 		LastProcessedAt:            lastProcessedTime,
 		LastProcessedTransactionID: lastProcessedTransactionID,
+		LastLsn:                    lastCommitLSN,
 	}
 
 	return &ProcessResult{

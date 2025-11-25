@@ -30,7 +30,7 @@ ORDER BY next_retry_at, id
 LIMIT @batch_size;
 
 -- name: GetImmediateJobs :many
-SELECT id, payload, created_at, transaction_id
+SELECT id, payload, created_at, transaction_id, commit_lsn
 FROM "poutbox".immediate
 WHERE
   created_at >= @last_processed_at::timestamptz
@@ -43,13 +43,18 @@ ORDER BY transaction_id ASC, id ASC
 LIMIT @batch_size;
 
 -- name: GetCursor :one
-SELECT id, last_processed_id, last_processed_at, last_processed_transaction_id, updated_at
+SELECT id, last_processed_id, last_processed_at, last_processed_transaction_id, last_lsn, updated_at
 FROM "poutbox".cursor
 WHERE id = 1;
 
 -- name: UpdateCursor :exec
 UPDATE "poutbox".cursor
-SET last_processed_id = @last_processed_id::bigint, last_processed_at = @last_processed_at::timestamptz, last_processed_transaction_id = @last_processed_transaction_id::bigint, updated_at = NOW() AT TIME ZONE 'UTC'
+SET 
+last_processed_id = @last_processed_id::bigint, 
+last_processed_at = @last_processed_at::timestamptz, 
+last_processed_transaction_id = @last_processed_transaction_id::bigint, 
+last_lsn = @last_lsn,
+updated_at = NOW() AT TIME ZONE 'UTC'
 WHERE id = 1;
 
 -- name: DeleteFailed :exec
