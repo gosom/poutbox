@@ -1,3 +1,30 @@
+// Package postgres provides database operations for the poutbox outbox system.
+// It handles connection management, schema migration, and logical replication for processing jobs.
+//
+// Example usage with polling mode:
+//
+//	db, err := postgres.Connect(ctx, connStr)
+//	defer db.Close()
+//
+//	err = postgres.Migrate(ctx, db)
+//
+// Example usage with logical replication mode:
+//
+//	db, err := postgres.Connect(ctx, connStr)
+//	defer db.Close()
+//
+//	err = postgres.Migrate(ctx, db)
+//	err = postgres.InitializeLogicalReplication(ctx, db)
+//
+//	stream, err := postgres.NewReplicationStream(ctx, replConnStr, 0)
+//	defer stream.Close(ctx)
+//
+//	for event, err := range stream.Events(ctx) {
+//		if err != nil {
+//			break
+//		}
+//		// Process event.Change or event.Keepalive
+//	}
 package postgres
 
 import (
@@ -13,6 +40,8 @@ import (
 //go:embed schema.sql
 var schemaFS embed.FS
 
+// Connect establishes a connection to Postgres using the given connection string.
+// Configures connection pooling: 25 max open, 5 idle, 5min lifetime, 2min idle timeout.
 func Connect(ctx context.Context, connStr string) (*sql.DB, error) {
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
@@ -36,6 +65,7 @@ func Connect(ctx context.Context, connStr string) (*sql.DB, error) {
 	return db, nil
 }
 
+// Migrate creates the database schema from the embedded schema.sql file.
 func Migrate(ctx context.Context, db *sql.DB) error {
 	schemaContent, err := schemaFS.ReadFile("schema.sql")
 	if err != nil {

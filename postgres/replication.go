@@ -14,28 +14,46 @@ import (
 )
 
 const (
+	// ReplicationEventTypeKeepalive indicates a keepalive message from the server.
 	ReplicationEventTypeKeepalive = "keepalive"
-	ReplicationEventTypeInsert    = "insert"
+	// ReplicationEventTypeInsert indicates an insert change event.
+	ReplicationEventTypeInsert = "insert"
 )
 
+// ReplicationEvent represents an event received from logical replication.
+// Either Change or Keepalive will be set depending on Type.
 type ReplicationEvent struct {
-	Type      string
-	Change    *LogicalReplChange
+	// Type is the event type: "keepalive" or "insert".
+	Type string
+	// Change contains the logical replication change data for insert events.
+	Change *LogicalReplChange
+	// Keepalive contains the server keepalive request for keepalive events.
 	Keepalive *KeepaliveRequest
 }
 
+// KeepaliveRequest represents a server keepalive message.
 type KeepaliveRequest struct {
-	ServerWALEnd   LSN
+	// ServerWALEnd is the server's current write-ahead log position.
+	ServerWALEnd LSN
+	// ReplyRequested indicates if the client should send a status update.
 	ReplyRequested bool
 }
 
+// ReplicationStream receives logical replication events from Postgres.
+// It parses WAL messages and tracks relation metadata.
 type ReplicationStream struct {
-	conn         *pgconn.PgConn
-	parser       MessageParser
-	relations    map[uint32]*RelationMetadata
+	// conn is the replication connection to Postgres.
+	conn *pgconn.PgConn
+	// parser converts WAL messages into change events.
+	parser MessageParser
+	// relations maps relation IDs to their metadata.
+	relations map[uint32]*RelationMetadata
+	// serverWALEnd tracks the server's current log position.
 	serverWALEnd LSN
 }
 
+// NewReplicationStream creates a new replication stream starting at the given LSN.
+// Connects to Postgres, identifies the system, and starts replication.
 func NewReplicationStream(ctx context.Context, connStr string, startLSN string) (*ReplicationStream, error) {
 	conn, err := pgconn.Connect(ctx, connStr)
 	if err != nil {
@@ -70,6 +88,8 @@ func NewReplicationStream(ctx context.Context, connStr string, startLSN string) 
 	}, nil
 }
 
+// Events returns an iterator of replication events from the stream.
+// Yields either insert changes or keepalive messages as they arrive.
 func (rs *ReplicationStream) Events(ctx context.Context) iter.Seq2[ReplicationEvent, error] {
 	return func(yield func(ReplicationEvent, error) bool) {
 		var buffer []*LogicalReplChange
@@ -192,6 +212,8 @@ func (rs *ReplicationStream) Events(ctx context.Context) iter.Seq2[ReplicationEv
 	}
 }
 
+// SendKeepalive sends a status update to the server with the current apply position.
+// Uses a separate timeout to avoid losing messages if the context is cancelled.
 func (rs *ReplicationStream) SendKeepalive(ctx context.Context, walApplyPosition LSN) error {
 	// when we restart the application, the context will be cancelled.
 	// this will cause not sending the status update, so the already proccesed WAL
@@ -208,6 +230,7 @@ func (rs *ReplicationStream) SendKeepalive(ctx context.Context, walApplyPosition
 	})
 }
 
+// Close closes the replication stream and releases the connection.
 func (rs *ReplicationStream) Close(ctx context.Context) error {
 	if rs.conn != nil {
 		_ = rs.conn.Close(ctx)

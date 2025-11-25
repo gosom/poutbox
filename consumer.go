@@ -11,32 +11,54 @@ import (
 	"poutbox/postgres"
 )
 
+// HandlerJob represents a job to be processed by a handler.
 type HandlerJob struct {
-	ID      int64
+	// ID is the unique identifier of the job.
+	ID int64
+	// Payload is the job data in bytes (typically JSON).
 	Payload []byte
 }
 
+// Handler processes jobs from the outbox.
+// It returns the IDs of jobs that failed and should be retried.
 type Handler interface {
+	// Handle processes a batch of jobs and returns the IDs of failed jobs.
 	Handle(ctx context.Context, jobs []HandlerJob) []int64
+	// Close closes the handler and releases resources.
 	Close(ctx context.Context) error
 }
 
+// ConsumerConfig configures job processing behavior.
 type ConsumerConfig struct {
-	BatchSize                 int32
-	MaxRetries                int32
-	PollInterval              time.Duration
-	UseLogicalReplication     bool
+	// BatchSize is the number of jobs to fetch and process in a single batch.
+	BatchSize int32
+	// MaxRetries is the maximum number of times a failed job will be retried.
+	MaxRetries int32
+	// PollInterval is the duration to wait between polling for new jobs.
+	PollInterval time.Duration
+	// UseLogicalReplication enables Postgres logical replication for immediate jobs.
+	UseLogicalReplication bool
+	// UpdateCursorOnLogicalRepl tracks cursor position during logical replication.
 	UpdateCursorOnLogicalRepl bool
 }
 
+// Consumer processes jobs from the outbox.
+// It manages immediate, scheduled, and failed job processing.
 type Consumer struct {
-	db          *sql.DB
-	config      ConsumerConfig
-	handler     Handler
-	queries     *postgres.Queries
+	// db is the Postgres database connection.
+	db *sql.DB
+	// config holds consumer configuration.
+	config ConsumerConfig
+	// handler processes batches of jobs.
+	handler Handler
+	// queries provides database query execution.
+	queries *postgres.Queries
+	// replConnStr is the connection string for logical replication.
 	replConnStr string
 }
 
+// NewConsumer creates a new Consumer with the given database, handler, and config.
+// Sets default values for BatchSize (1000), MaxRetries (3), and PollInterval (100ms).
 func NewConsumer(db *sql.DB, handler Handler, config ConsumerConfig) *Consumer {
 	if config.BatchSize <= 0 {
 		config.BatchSize = 1000
@@ -56,10 +78,14 @@ func NewConsumer(db *sql.DB, handler Handler, config ConsumerConfig) *Consumer {
 	}
 }
 
+// SetReplicationConnString sets the connection string for logical replication.
+// Required when UseLogicalReplication is enabled.
 func (c *Consumer) SetReplicationConnString(connStr string) {
 	c.replConnStr = connStr
 }
 
+// Start begins processing jobs from immediate, scheduled, and failed queues.
+// It runs three concurrent processors and returns the first error encountered.
 func (c *Consumer) Start(ctx context.Context) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, 3)
@@ -108,6 +134,7 @@ func (c *Consumer) Start(ctx context.Context) error {
 	return nil
 }
 
+// Close closes the consumer and releases resources via the handler.
 func (c *Consumer) Close(ctx context.Context) error {
 	return c.handler.Close(ctx)
 }
@@ -123,11 +150,17 @@ type jobBatch struct {
 	jobs []job //nolint:unused // marked as unused due to generics
 }
 
+// ProcessResult holds the results of processing a batch of jobs.
+// It tracks which jobs to retry, delete, or send to dead letter, and updates cursor position.
 type ProcessResult struct {
+	// DeadLetter contains jobs that exceeded max retries.
 	DeadLetter *jobBatch
-	ToRetry    *jobBatch
-	ToDelete   []int64
-	Cursor     *postgres.UpdateCursorParams
+	// ToRetry contains jobs that failed and should be retried.
+	ToRetry *jobBatch
+	// ToDelete contains job IDs that were processed successfully.
+	ToDelete []int64
+	// Cursor tracks the latest processed job ID, timestamp, and transaction ID for resumption.
+	Cursor *postgres.UpdateCursorParams
 }
 
 //nolint:unused // marked as unused due to generics

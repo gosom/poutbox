@@ -8,17 +8,25 @@ import (
 	"time"
 )
 
+// PartitionOps manages table partitions for the immediate queue.
+// Creates new partitions and removes old ones based on time windows.
 type PartitionOps struct {
-	db      *sql.DB
+	// db is the database connection for executing DDL operations.
+	db *sql.DB
+	// queries provides database query execution.
 	queries *Queries
 }
 
+// NewPartitionOps creates a new PartitionOps instance with the given database.
 func NewPartitionOps(db *sql.DB) *PartitionOps {
 	return &PartitionOps{
 		db: db, queries: New(),
 	}
 }
 
+// Run creates partitions from 'from' to 'to' with the given interval.
+// Drops partitions with end time before cutoffTime.
+// All operations are wrapped in a transaction with locking for safety.
 func (p *PartitionOps) Run(ctx context.Context, from time.Time, to time.Time, interval time.Duration, cutoffTime time.Time) error {
 	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {

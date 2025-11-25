@@ -10,11 +10,16 @@ import (
 )
 
 const (
-	PublicationName    = "poutbox_immediate_pub"
-	ReplicationSlot    = "poutbox_immediate_slot"
+	// PublicationName is the publication used for logical replication.
+	PublicationName = "poutbox_immediate_pub"
+	// ReplicationSlot is the replication slot name for tracking LSN progress.
+	ReplicationSlot = "poutbox_immediate_slot"
+	// _ReplicationPlugin is the pgoutput plugin used for logical replication.
 	_ReplicationPlugin = "pgoutput"
 )
 
+// InitializeLogicalReplication creates the publication and replication slot if they don't exist.
+// Idempotent: safe to call multiple times.
 func InitializeLogicalReplication(ctx context.Context, db *sql.DB) error {
 	return withPgxConn(ctx, db, func(ctx context.Context, pgxConn *pgx.Conn) error {
 		if err := createPublicationInNewTx(ctx, pgxConn); err != nil {
