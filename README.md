@@ -1,6 +1,6 @@
 # Poutbox
 
-[![GoDoc](https://godoc.org/github.com/gosom/poutbox?status.svg)](https://godoc.org/github.com/gosom/poutbox)
+[![GoDoc](https://godoc.org/github.com/gosom/poutbox?status.svg)](https://godoc.org/github.com/gosom/poutbox) [![Go Report Card](https://goreportcard.com/badge/github.com/gosom/poutbox)](https://goreportcard.com/report/github.com/gosom/poutbox)
 
 A Go library that implements the outbox pattern using PostgreSQL. It supports two methods: polling and logical replication.
 
