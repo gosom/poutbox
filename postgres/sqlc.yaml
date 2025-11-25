@@ -13,4 +13,7 @@ sql:
           - db_type: "bigint"
             go_type: "int64"
           - db_type: "xid8"
-            go_type: "int64"
+            go_type: "uint64"
+          - db_type: "pg_lsn"
+            go_type: "string"
+

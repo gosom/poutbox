@@ -26,23 +26,29 @@ import (
 
 func main() {
 	allowedModes := []string{"client", "consumer", "consumer-logical", "maintenance", "migrate"}
-	var mode string
+	var params runParams
 
-	flag.StringVar(&mode, "mode", "", "Mode to run: "+strings.Join(allowedModes, ", "))
+	flag.StringVar(&params.mode, "mode", "", "Mode to run: "+strings.Join(allowedModes, ", "))
+	flag.BoolVar(&params.alwaysCursor, "always-cursor", false, "Always save the cursor position (only for consumer-logical mode)")
 	flag.Parse()
 
-	if !slices.Contains(allowedModes, mode) {
+	if !slices.Contains(allowedModes, params.mode) {
 		flag.Usage()
 		os.Exit(2)
 	}
 
-	if err := run(mode); err != nil {
+	if err := run(params); err != nil {
 		log.Printf("fatal error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(mode string) error {
+type runParams struct {
+	mode         string
+	alwaysCursor bool
+}
+
+func run(params runParams) error {
 	ctx, cancel := signal.NotifyContext(context.Background(),
 		syscall.SIGINT,
 		syscall.SIGTERM,
@@ -71,11 +77,11 @@ func run(mode string) error {
 		return err
 	}
 
-	if mode == "migrate" {
+	if params.mode == "migrate" {
 		return nil
 	}
 
-	switch mode {
+	switch params.mode {
 	case "maintenance":
 		return nil
 	case "client":
@@ -83,9 +89,9 @@ func run(mode string) error {
 	case "consumer":
 		return runConsumer(ctx, db)
 	case "consumer-logical":
-		return runConsumerLogicalRepl(ctx, db, connStr)
+		return runConsumerLogicalRepl(ctx, db, connStr, params.alwaysCursor)
 	default:
-		return errors.New("unsupported mode: " + mode)
+		return errors.New("unsupported mode: " + params.mode)
 	}
 }
 
@@ -135,14 +141,15 @@ func runConsumer(ctx context.Context, db *sql.DB) error {
 	return consumer.Start(ctx)
 }
 
-func runConsumerLogicalRepl(ctx context.Context, db *sql.DB, connStr string) error {
+func runConsumerLogicalRepl(ctx context.Context, db *sql.DB, connStr string, alwaysCursor bool) error {
 	handler := createJobHandler("jobs_logical_repl.txt")
 
 	config := poutbox.ConsumerConfig{
-		BatchSize:             1000,
-		MaxRetries:            3,
-		PollInterval:          100 * time.Millisecond,
-		UseLogicalReplication: true,
+		BatchSize:                 1000,
+		MaxRetries:                3,
+		PollInterval:              100 * time.Millisecond,
+		UseLogicalReplication:     true,
+		UpdateCursorOnLogicalRepl: alwaysCursor,
 	}
 
 	replConnStr := connStr

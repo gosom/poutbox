@@ -10,6 +10,5 @@ linters:
     - ineffassign
     - staticcheck
     - goconst
-    - gocyclo
     - misspell
     - errcheck

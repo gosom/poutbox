@@ -14,6 +14,7 @@ type PoutboxCursor struct {
 	LastProcessedID            int64
 	LastProcessedAt            time.Time
 	LastProcessedTransactionID int64
+	LastLsn                    string
 	UpdatedAt                  time.Time
 }
 
@@ -40,6 +41,7 @@ type PoutboxImmediate struct {
 	Payload       string
 	CreatedAt     time.Time
 	TransactionID int64
+	CommitLsn     string
 }
 
 type PoutboxPartitionMetum struct {

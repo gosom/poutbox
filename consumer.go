@@ -22,10 +22,11 @@ type Handler interface {
 }
 
 type ConsumerConfig struct {
-	BatchSize             int32
-	MaxRetries            int32
-	PollInterval          time.Duration
-	UseLogicalReplication bool
+	BatchSize                 int32
+	MaxRetries                int32
+	PollInterval              time.Duration
+	UseLogicalReplication     bool
+	UpdateCursorOnLogicalRepl bool
 }
 
 type Consumer struct {

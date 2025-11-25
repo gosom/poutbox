@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pglogrepl"
@@ -11,10 +12,12 @@ import (
 type LSN = pglogrepl.LSN
 
 type LogicalReplChange struct {
-	ID        int64
-	Payload   []byte
-	CreatedAt time.Time
-	LSN       LSN
+	ID            int64
+	Payload       []byte
+	CreatedAt     time.Time
+	TransactionID int64
+	CommitLsn     string // this is as stored in the immediate table
+	LSN           LSN
 }
 
 type RelationMetadata struct {
@@ -72,7 +75,7 @@ func (p *PgoutputParser) ParseInsert(msg *pglogrepl.InsertMessageV2, relMeta *Re
 		case "id":
 			id, err := col.Int64()
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("could not parse id: %w", err)
 			}
 
 			change.ID = id
@@ -88,6 +91,14 @@ func (p *PgoutputParser) ParseInsert(msg *pglogrepl.InsertMessageV2, relMeta *Re
 			if ts.Valid {
 				change.CreatedAt = ts.Time.UTC()
 			}
+		case "transaction_id":
+			txID, err := col.Int64()
+			if err != nil {
+				return nil, fmt.Errorf("could not parse transaction_id: %w", err)
+			}
+			change.TransactionID = txID
+		case "commit_lsn":
+			change.CommitLsn = string(col.Data)
 		}
 	}
 
