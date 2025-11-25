@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"poutbox/postgres"
+	"github.com/gosom/poutbox/postgres"
 )
 
 // Maintenance manages database partitions and cleanup.

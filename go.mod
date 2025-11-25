@@ -1,4 +1,4 @@
-module poutbox
+module github.com/gosom/poutbox
 
 go 1.25.3
 

@@ -21,7 +21,7 @@ import (
 
 	"poutbox"
 
-	"poutbox/postgres"
+	"github.com/gosom/poutbox/postgres"
 )
 
 func main() {

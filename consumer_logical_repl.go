@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"poutbox/postgres"
+	"github.com/gosom/poutbox/postgres"
 )
 
 const (

@@ -44,7 +44,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"poutbox/postgres"
+	"github.com/gosom/poutbox/postgres"
 )
 
 // Client enqueues jobs into the Postgres-backed outbox system.

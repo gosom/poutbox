@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"poutbox/postgres"
+	"github.com/gosom/poutbox/postgres"
 )
 
 type failedJobProcessor struct {

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"poutbox/postgres"
+	"github.com/gosom/poutbox/postgres"
 )
 
 // HandlerJob represents a job to be processed by a handler.
